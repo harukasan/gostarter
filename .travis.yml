@@ -1,5 +1,7 @@
 language: go
 
+git:
+  submodules: false
 go:
   - 1.8
   - tip
@@ -8,3 +10,8 @@ cache:
   directories:
     - $HOME/cache
 sudo: false
+
+before_install:
+  - sed -i 's/git@github.com:/https:\/\/github.com\//' .gitmodules
+  - git submodule update --init --recursive
+
