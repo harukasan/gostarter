@@ -1,0 +1,3 @@
+[submodule "deps/p5-Server-Starter"]
+	path = deps/p5-Server-Starter
+	url = git@github.com:kazuho/p5-Server-Starter.git
