@@ -343,10 +343,6 @@ func Listen(mode string) error {
 	return DefaultStarter.Listen(mode)
 }
 
-func IsWorker() bool {
-	return listener.GetPortsSpecification() != "" || os.Getenv("GOSTARTER_MODE") != "master"
-}
-
 func FindStartServerProgram() string {
 	dir, err := os.Getwd()
 	if err != nil {
