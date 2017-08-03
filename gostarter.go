@@ -7,12 +7,12 @@ Package gostarter provides utilities to run any servers with start_server
 process for graceful restarting and hot deployment.
 
 The start_server utility is a superdaemon for hot-deploying server programs.
-The package provides two modes:
+The package provides three modes:
 
 	* MasterMode:  spawning start_server program for master process.
 	* WorkerMode:  receiving sockets from the start_server and run servers.
 	               If the worker process is not spawned from the start_server,
-								 the worker process will act as a single process server.
+	               the worker process will act as a single process server.
 	* MonitorMode: running monitor using http or custom health checker.
 
 To run HTTP server:
@@ -46,6 +46,7 @@ import (
 // StartServerProgram specifies the start_server program name.
 var StartServerProgram = "start_server"
 
+// Server describles a server instance listening in a specific address.
 type Server struct {
 	net  string
 	addr string
@@ -54,10 +55,20 @@ type Server struct {
 	monitors []Monitor
 }
 
+// Monitor implements the health checks.
+// A monitor must implements health checking loop in Run function.
+// The loop must call the trigger function when the health check is failed,
+// and must stop immidiately when the context ctx is canceled.
 type Monitor interface {
+	// Run runs health check loop.
+	// It must check the server specified address net and addr in the loop.
+	// If the health check is failed, it must call the trigger function and
+	// exit the main loop.
+	// If the ctx is canceld, the loop must stop ASAP.
 	Run(ctx context.Context, net, addr string, trigger func(error) error) error
 }
 
+// Add monitor registers a monitor m into a server.
 func (s *Server) AddMonitor(m Monitor) {
 	for _, em := range s.monitors {
 		if em == m {
@@ -77,14 +88,18 @@ type Starter struct {
 	err     error
 }
 
+// TCPServer is a server which implements Listener handler.
 type TCPServer interface {
 	ServeTCP(net.Listener) error
 }
 
+// GracefulServer is a server which implements graceful shutdown function.
 type GracefulServer interface {
 	Shutdown(ctx context.Context) error
 }
 
+// AddTCPServer registers the new TCP server s to listen specified network and
+// address.
 func (s *Starter) AddTCPServer(net, addr string, ts TCPServer) *Server {
 	sv := &Server{
 		net:    net,
@@ -95,6 +110,8 @@ func (s *Starter) AddTCPServer(net, addr string, ts TCPServer) *Server {
 	return sv
 }
 
+// AddServer registers the new HTTP server s to listen specified network and
+// address.
 func (s *Starter) AddServer(net, addr string, server *http.Server) *Server {
 	return s.AddTCPServer(net, addr, &httpServer{server})
 }
@@ -113,6 +130,18 @@ const (
 	WorkerMode  = "worker"
 )
 
+// Listen starts serving all registered server in the specified mode.
+//
+//   * MasterMode:  spawns start_server program with parameters to listen all
+//                  server sockets.
+//   * WorkerMode:  runs all servers. If the process is spawned from
+//                  start_server, the servers uses sockets passing from
+//                  start_server.
+//   * MonitorMode: run health check monitors to all servers.
+//                  If the monitor is spawned from the worker with start_server,
+//                  the monitor will send signals to start_server when the
+//                  health check is failed.
+//
 func (s *Starter) Listen(mode string) error {
 	if mode == "" {
 		mode = os.Getenv("GOSTARTER_MODE")
@@ -135,7 +164,7 @@ func (s *Starter) Listen(mode string) error {
 func (s *Starter) startMonitor() error {
 	pid, err := strconv.Atoi(os.Getenv("GOSTARTER_MASTER_PID"))
 	if err != nil {
-		return fmt.Errorf("failed to parse GOSTARTER_MASTER_PID: %v", err)
+		return fmt.Errorf("failed to retrieve GOSTARTER_MASTER_PID: %v", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -331,14 +360,19 @@ func (s *Starter) buildStartServerArgs() ([]string, error) {
 
 var DefaultStarter = &Starter{}
 
+// AddServer registers the new HTTP server s to listen specified network and
+// address.
 func AddServer(net, addr string, s *http.Server) *Server {
 	return DefaultStarter.AddServer(net, addr, s)
 }
 
+// AddTCPServer registers the new TCP server s to listen specified network and
+// address.
 func AddTCPServer(net, addr string, s TCPServer) *Server {
 	return DefaultStarter.AddTCPServer(net, addr, s)
 }
 
+// Listen starts serving all registered server.
 func Listen(mode string) error {
 	return DefaultStarter.Listen(mode)
 }
